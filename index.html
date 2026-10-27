@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Palm Recharge - Auto Sound 30 Days</title>
+<style>
+body{font-family:Arial;text-align:center;padding:20px;background:#111;color:#fff}
+.card{background:#222;padding:20px;border-radius:15px;margin:10px}
+button{padding:15px 30px;font-size:18px;border-radius:10px;border:none;background:#00ff88;color:#000;font-weight:bold}
+#freq{width:80%}
+h1{color:#00ff88}
+</style>
+</head>
+<body>
+
+<h1>🔊 Palm Sound Recharge</h1>
+
+<div class="card">
+<p id="status">Loading...</p>
+<p id="days"></p>
+<p id="expiry"></p>
+</div>
+
+<div class="card">
+<label>Frequency: <span id="freqVal">432</span> Hz</label><br>
+<input type="range" id="freq" min="100" max="1000" value="432">
+</div>
+
+<button id="mainBtn" onclick="handleMain()">ACTIVATE RECHARGE</button>
+
+<script>
+let audioCtx, oscillator, gainNode;
+let isPlaying = false;
+
+const RECHARGE_DAYS = 30;
+const WARNING_DAY = 28;
+
+// === FIRST USE LOGIC ===
+function getFirstUse() {
+  let d = localStorage.getItem("firstUse");
+  return d ? new Date(d) : null;
+}
+
+function setFirstUse() {
+  let now = new Date();
+  localStorage.setItem("firstUse", now.toISOString());
+  let expiry = new Date(now);
+  expiry.setDate(now.getDate() + RECHARGE_DAYS);
+  localStorage.setItem("expiryDate", expiry.toISOString());
+  return now;
+}
+
+function getStatus() {
+  let first = getFirstUse();
+  if (!first) return null;
+  let now = new Date();
+  let expiry = new Date(localStorage.getItem("expiryDate"));
+  let diffMs = expiry - now;
+  let remainingDays = Math.ceil(diffMs / (1000*60*60*24));
+  let usedDays = RECHARGE_DAYS - remainingDays + 1;
+  let currentDay = Math.floor((now - first)/(1000*60*60*24)) + 1;
+  return { first, expiry, remainingDays, usedDays: currentDay, isExpired: remainingDays <=0, isWarning: currentDay >= WARNING_DAY && currentDay <= RECHARGE_DAYS };
+}
+
+// === SOUND FREQUENCY CODE ===
+function soundON() {
+  if (isPlaying) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  oscillator = audioCtx.createOscillator();
+  gainNode = audioCtx.createGain();
+  
+  oscillator.type = "sine";
+  oscillator.frequency.value = document.getElementById("freq").value;
+  gainNode.gain.value = 0.3;
+  
+  oscillator.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
+  oscillator.start();
+  isPlaying = true;
+}
+
+function soundOFF() {
+  if (oscillator) {
+    gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+    setTimeout(()=>{ oscillator.stop(); audioCtx.close(); }, 600);
+  }
+  isPlaying = false;
+}
+
+function updateFreq() {
+  let f = document.getElementById("freq").value;
+  document.getElementById("freqVal").innerText = f;
+  if (oscillator) oscillator.frequency.value = f;
+}
+document.getElementById("freq").addEventListener("input", updateFreq);
+
+// === AUTOMODE CHECK ===
+function autoCheck() {
+  let s = getStatus();
+  let statusEl = document.getElementById("status");
+  let daysEl = document.getElementById("days");
+  let expiryEl = document.getElementById("expiry");
+  let btn = document.getElementById("mainBtn");
+
+  if (!s) {
+    statusEl.innerText = "❌ No Active Recharge";
+    daysEl.innerText = "First use pe 30 days start hoga";
+    expiryEl.innerText = "";
+    btn.innerText = "ACTIVATE RECHARGE";
+    btn.style.display = "block";
+    soundOFF();
+    return;
+  }
+
+  if (s.isExpired) {
+    statusEl.innerText = "❌ RECHARGE KHATAM - Day 31";
+    daysEl.innerText = `Excess: ${Math.abs(s.remainingDays)} days`;
+    expiryEl.innerText = `Expired On: ${s.expiry.toLocaleDateString()}`;
+    btn.innerText = "RECHARGE AGAIN";
+    btn.style.display = "block";
+    soundOFF();
+    // Auto clear for next recharge
+    // localStorage.clear(); // uncomment if auto reset chahiye
+    return;
+  }
+
+  // Active
+  statusEl.innerText = s.isWarning ? `⚠️ WARNING - Day ${s.usedDays}/30` : `✅ ACTIVE - Day ${s.usedDays}/30`;
+  daysEl.innerText = `${s.remainingDays} days remaining`;
+  expiryEl.innerText = `Expiry: ${s.expiry.toLocaleDateString()}`;
+  btn.style.display = "none";
+  soundON();
+}
+
+function handleMain() {
+  setFirstUse();
+  autoCheck();
+}
+
+// Auto run every hour + on load
+setInterval(autoCheck, 1000*60*60);
+window.onload = autoCheck;
+
+// For testing: clear data
+// localStorage.clear();
+</script>
+</body>
+</html>
